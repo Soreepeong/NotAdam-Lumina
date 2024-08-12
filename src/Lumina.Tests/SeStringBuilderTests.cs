@@ -431,7 +431,7 @@ public class SeStringBuilderTests
                 .PopColorType()
                 .ToReadOnlySeString(),
         };
-        foreach( var row in addon )
+        foreach( var row in addon.Values )
         {
             _outputHelper.WriteLine( $"{row.RowId}\t{row.Text.ExtractText()}\t{row.Text}" );
             if( expected.TryGetValue( row.RowId, out var expectedSeString ) )
