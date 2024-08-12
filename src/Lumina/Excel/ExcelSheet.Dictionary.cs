@@ -3,13 +3,14 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
+using System.Runtime.CompilerServices;
 
 namespace Lumina.Excel;
 
 public sealed partial class ExcelSheet< T >
 {
     /// <summary>Gets the key collection, sorted by row IDs.</summary>
-    public ImmutableList< uint > Keys { get; }
+    public ImmutableArray< uint > Keys { get; }
 
     /// <summary>Gets the value collection, sorted by row IDs.</summary>
     public RowList Values { get; }
@@ -183,20 +184,28 @@ public sealed partial class ExcelSheet< T >
         object IDictionaryEnumerator.Value => Current.Value;
 
         /// <inheritdoc/>
+        [MethodImpl( MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization )]
         public bool MoveNext()
         {
-            if( _index + 1 >= sheet.Count )
+            if( ++_index >= sheet.Count )
+            {
+                --_index;
                 return false;
+            }
 
-            _index++;
-            Current = new( sheet.Keys[ _index ], sheet.Values[ _index ] );
+            var key = sheet.Keys[ _index ];
+            Current = new(
+                key,
+                sheet.HasSubrows ? sheet.CreateSubrow( key, 0, sheet.Lookup[_index] ) : sheet.CreateRow( key, sheet.Lookup[_index] ) );
             return true;
         }
 
         /// <inheritdoc/>
+        [MethodImpl( MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization )]
         public void Reset() => _index = -1;
 
         /// <inheritdoc/>
+        [MethodImpl( MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization )]
         public void Dispose()
         { }
     }

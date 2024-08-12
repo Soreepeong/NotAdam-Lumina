@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Lumina.Data;
 using Lumina.Data.Files.Excel;
@@ -178,11 +179,13 @@ public sealed partial class ExcelSheet< T >
     private T CreateRow( uint rowId, in RowLookup val ) =>
         T.Create( Pages[ val.PageIdx ], val.Offset, rowId );
 
+    [MethodImpl( MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization )]
     private T CreateRowByIndex( int rowIndex ) => CreateRow( Keys[ rowIndex ], Lookup[ rowIndex ] );
 
     private T CreateSubrow( uint rowId, ushort subrowId, in RowLookup val ) =>
         T.Create( Pages[ val.PageIdx ], val.Offset + 2 + ( subrowId * ( SubrowDataOffset + 2u ) ), rowId, subrowId );
 
+    [MethodImpl( MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization )]
     private T CreateSubrowByIndex( int rowIndex, ushort subrowId ) => CreateSubrow( Keys[ rowIndex ], subrowId, Lookup[ rowIndex ] );
 
     /// <summary>
