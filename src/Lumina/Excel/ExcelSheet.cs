@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -24,6 +25,8 @@ public sealed partial class ExcelSheet< T >
     private List< ExcelPage > Pages { get; }
 
     private ImmutableArray< RowLookup > Lookup { get; }
+
+    private FrozenDictionary<uint, int> RowIdToIndex { get; }
 
     private ushort SubrowDataOffset { get; }
 
@@ -136,14 +139,17 @@ public sealed partial class ExcelSheet< T >
         Keys = [..rowIds];
         Lookup = [..lookups];
         Values = new( this );
+        RowIdToIndex = rowIds.Select( static ( x, i ) => ( x, i ) ).ToFrozenDictionary( x => x.x, x => x.i );
     }
 
     /// <summary>Finds the index of the given row ID.</summary>
     /// <param name="rowId">Row ID to search.</param>
     /// <returns>Zero-based index of the row, or <c>-1</c> if not found.</returns>
-    public int IndexOfRow( uint rowId ) => Math.Max( -1, Keys.BinarySearch( rowId ) );
+    [MethodImpl( MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization )]
+    public int IndexOfRow( uint rowId ) => RowIdToIndex.GetValueOrDefault(rowId, -1);
 
     /// <inheritdoc/>
+    [MethodImpl( MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization )]
     public bool HasRow( uint rowId ) => IndexOfRow( rowId ) >= 0;
 
     /// <inheritdoc/>
@@ -179,14 +185,8 @@ public sealed partial class ExcelSheet< T >
     private T CreateRow( uint rowId, in RowLookup val ) =>
         T.Create( Pages[ val.PageIdx ], val.Offset, rowId );
 
-    [MethodImpl( MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization )]
-    private T CreateRowByIndex( int rowIndex ) => CreateRow( Keys[ rowIndex ], Lookup[ rowIndex ] );
-
     private T CreateSubrow( uint rowId, ushort subrowId, in RowLookup val ) =>
         T.Create( Pages[ val.PageIdx ], val.Offset + 2 + ( subrowId * ( SubrowDataOffset + 2u ) ), rowId, subrowId );
-
-    [MethodImpl( MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization )]
-    private T CreateSubrowByIndex( int rowIndex, ushort subrowId ) => CreateSubrow( Keys[ rowIndex ], subrowId, Lookup[ rowIndex ] );
 
     /// <summary>
     /// Tries to get the <paramref name="rowId"/>th row in this sheet. If this sheet has subrows, it will return the first subrow.
@@ -199,7 +199,7 @@ public sealed partial class ExcelSheet< T >
             return TryGetSubrow( rowId, 0 );
 
         var index = IndexOfRow( rowId );
-        return index < 0 ? null : CreateRowByIndex( index );
+        return index < 0 ? null : CreateRow( rowId, Lookup[ index ] );
     }
 
     /// <summary>
@@ -217,9 +217,11 @@ public sealed partial class ExcelSheet< T >
         var index = IndexOfRow( rowId );
         if( index < 0 )
             return null;
-        if( subrowId >= Lookup[ index ].SubrowCount )
+
+        var lookup = Lookup[ index ];
+        if( subrowId >= lookup.SubrowCount )
             return null;
-        return CreateSubrowByIndex( index, subrowId );
+        return CreateSubrow( rowId, subrowId, lookup );
     }
 
     /// <summary>
@@ -248,9 +250,11 @@ public sealed partial class ExcelSheet< T >
         var index = IndexOfRow( rowId );
         if( index < 0 )
             throw new ArgumentOutOfRangeException( nameof( rowId ), "Row does not exist" );
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual( subrowId, Lookup[ index ].SubrowCount );
 
-        return CreateSubrowByIndex( index, subrowId );
+        var lookup = Lookup[ index ];
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual( subrowId, lookup.SubrowCount );
+
+        return CreateSubrow( rowId, subrowId, lookup );
     }
 
     /// <summary>

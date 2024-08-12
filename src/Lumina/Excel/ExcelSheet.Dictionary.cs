@@ -50,7 +50,14 @@ public sealed partial class ExcelSheet< T >
 
     /// <summary>Gets the row with the given row ID.</summary>
     /// <param name="rowId">Row ID.</param>
-    public T this[ uint rowId ] => TryGetRow( rowId ) ?? throw new ArgumentOutOfRangeException(nameof(rowId));
+    public T this[ uint rowId ] {
+        get {
+            var index = IndexOfRow( rowId );
+            if( index < 0 )
+                throw new ArgumentOutOfRangeException( nameof( rowId ) );
+            return HasSubrows ? CreateSubrow( rowId, 0, Lookup[ index ] ) : CreateRow( rowId, Lookup[ index ] );
+        }
+    }
 
     /// <inheritdoc/>
     T IDictionary< uint, T >.this[ uint key ] {
@@ -93,12 +100,18 @@ public sealed partial class ExcelSheet< T >
         if( HasSubrows )
         {
             for( var i = 0; i < Lookup.Length; i++ )
-                array[ arrayIndex++ ] = new( Keys[ i ], CreateSubrowByIndex( i, 0 ) );
+            {
+                var rowId = Keys[ i ];
+                array[ arrayIndex++ ] = new( rowId, CreateSubrow( rowId, 0, Lookup[ i ] ) );
+            }
         }
         else
         {
             for( var i = 0; i < Lookup.Length; i++ )
-                array[ arrayIndex++ ] = new( Keys[ i ], CreateRowByIndex( i ) );
+            {
+                var rowId = Keys[ i ];
+                array[ arrayIndex++ ] = new( rowId, CreateRow( rowId, Lookup[ i ] ) );
+            }
         }
     }
 
@@ -113,17 +126,24 @@ public sealed partial class ExcelSheet< T >
         if( HasSubrows )
         {
             for( var i = 0; i < Lookup.Length; i++ )
-                array.SetValue( new DictionaryEntry( Keys[ i ], CreateSubrowByIndex( i, 0 ) ), index++ );
+            {
+                var rowId = Keys[ i ];
+                array.SetValue( new DictionaryEntry( rowId, CreateSubrow( rowId, 0, Lookup[ i ] ) ), index++ );
+            }
         }
         else
         {
             for( var i = 0; i < Lookup.Length; i++ )
-                array.SetValue( new DictionaryEntry( Keys[ i ], CreateRowByIndex( i ) ), index++ );
+            {
+                var rowId = Keys[ i ];
+                array.SetValue( new DictionaryEntry( rowId, CreateRow( rowId, Lookup[ i ] ) ), index++ );
+            }
         }
     }
 
     /// <inheritdoc cref="IDictionary{TKey,TValue}.ContainsKey"/>
-    public bool ContainsKey( uint key ) => Keys.BinarySearch( key ) != -1;
+    [MethodImpl( MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization )]
+    public bool ContainsKey( uint key ) => HasRow( key );
 
     /// <inheritdoc cref="IDictionary{TKey,TValue}.TryGetValue"/>
     public bool TryGetValue( uint key, out T value )
@@ -196,7 +216,7 @@ public sealed partial class ExcelSheet< T >
             var key = sheet.Keys[ _index ];
             Current = new(
                 key,
-                sheet.HasSubrows ? sheet.CreateSubrow( key, 0, sheet.Lookup[_index] ) : sheet.CreateRow( key, sheet.Lookup[_index] ) );
+                sheet.HasSubrows ? sheet.CreateSubrow( key, 0, sheet.Lookup[ _index ] ) : sheet.CreateRow( key, sheet.Lookup[ _index ] ) );
             return true;
         }
 
@@ -231,7 +251,9 @@ public sealed partial class ExcelSheet< T >
             get {
                 ArgumentOutOfRangeException.ThrowIfNegative( index );
                 ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual( index, sheet.Count );
-                return sheet.HasSubrows ? sheet.CreateSubrowByIndex( index, 0 ) : sheet.CreateRowByIndex( index );
+                var rowId = sheet.Keys[ index ];
+                var lookup = sheet.Lookup[ index ];
+                return sheet.HasSubrows ? sheet.CreateSubrow( rowId, 0, lookup ) : sheet.CreateRow( rowId, lookup );
             }
         }
 
@@ -281,7 +303,7 @@ public sealed partial class ExcelSheet< T >
         public int IndexOf( T item )
         {
             var count = Count;
-            for (var index = 0; index < count; index++)
+            for( var index = 0; index < count; index++ )
             {
                 if( EqualityComparer< T >.Default.Equals( this[ index ], item ) )
                     return index;
@@ -352,9 +374,11 @@ public sealed partial class ExcelSheet< T >
                     _index++;
                 }
 
+                var rowId = sheet.Keys[ _index ];
+                var lookup = sheet.Lookup[ _index ];
                 Current = sheet.HasSubrows
-                    ? sheet.CreateSubrowByIndex( _index, _subrowIndex )
-                    : sheet.CreateRowByIndex( _index );
+                    ? sheet.CreateSubrow( rowId, _subrowIndex, lookup )
+                    : sheet.CreateRow( rowId, lookup );
                 return true;
             }
 
